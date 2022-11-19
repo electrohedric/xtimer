@@ -1,7 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
 from datetime import datetime
-from dateutil.relativedelta import relativedelta
 import masterref
 import widgets as w
 import converters as conv
@@ -33,6 +32,8 @@ class App(ttk.Frame):
         self.products_table = w.Table(self, ["product", "time"])
         self.add_product_row()
         
+        self.timeline_table = w.Table(self)  # TODO: perhaps a Column is more appropriate
+        
         self.products_done_row.grid(row=0, sticky=tk.W)
         self.products_table.grid(row=1, sticky=tk.W)
     
@@ -53,7 +54,7 @@ class App(ttk.Frame):
         
         # update all times of products to the new default if they matched the previous default value
         for row in self.products_table:
-            if entry := self.products_table.get_widget(row, "time"):
+            if entry := self.products_table.get_widget(row, "time"):  # type: w.Entry
                 custom_dt = entry.get()
                 if custom_dt is None or custom_dt == self.state.products_done_datetime:
                     entry.set(d)
