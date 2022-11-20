@@ -14,7 +14,7 @@ class Converter(ABC, Generic[T]):
     def __init__(self):
         self.error = None
     
-    def to_string(self, value: T) -> str:
+    def to_string(self, value: T|None) -> str:
         raise NotImplementedError
     
     def to_value(self, string: str) -> T | None:
@@ -22,7 +22,9 @@ class Converter(ABC, Generic[T]):
 
 
 class StringConverter(Converter):
-    def to_string(self, value: str) -> str:
+    def to_string(self, value: str | None) -> str:
+        if value is None:
+            return ""
         return value.strip()
 
     def to_value(self, string: str) -> str | None:
@@ -36,7 +38,9 @@ class TimeToNextDatetimeConverter(Converter):
             datetime_format = datetime_format.replace("#", "-")
         self.format = datetime_format
 
-    def to_string(self, value: datetime) -> str:
+    def to_string(self, value: datetime | None) -> str:
+        if value is None:
+            return ""
         return datetime.strftime(value, self.format)
 
     def to_value(self, string: str) -> datetime | None:

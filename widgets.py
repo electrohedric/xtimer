@@ -16,7 +16,7 @@ class BaseFrame(ttk.Frame):
         return x
 
 
-class Row(BaseFrame):
+class HStack(BaseFrame):
     def __init__(self, master, **kwargs):
         super().__init__(master, **kwargs)
         self.widgets: list[ttk.Widget] = []
@@ -28,14 +28,28 @@ class Row(BaseFrame):
             self.widgets.append(widget)
 
 
+class VStack(BaseFrame):
+    def __init__(self, master, **kwargs):
+        super().__init__(master, **kwargs)
+        self.widgets: list[ttk.Widget] = []
+    
+    def add(self, *widgets: SupportsWidget, pad=5):
+        for widget in widgets:
+            widget = self.as_widget(widget)
+            widget.pack(pady=pad)
+            self.widgets.append(widget)
+
+
 ColumnKey = int|str
 
 class Table(BaseFrame):
-    def __init__(self, master, key_order: list[str] = None, fixed=False, **kwargs):
+    def __init__(self, master, key_order: list[str] = None, fixed=False, padx=5, pady=5, **kwargs):
         super().__init__(master, **kwargs)
         self.widgets: list[dict[ColumnKey, ttk.Widget]] = []
         self.key_order: list[str] = key_order or []
         self.fixed = fixed
+        self.padx = padx
+        self.pady = pady
     
     def get_column(self, key: ColumnKey):
         if isinstance(key, int):
@@ -55,7 +69,7 @@ class Table(BaseFrame):
             return False
         widget = self.as_widget(widget)
         self.remove(row, key)  # remove destination just in case
-        widget.grid(row=row, column=self.get_column(key))
+        widget.grid(row=row, column=self.get_column(key), padx=self.padx, pady=self.pady)
         self.widgets[row][key] = widget
     
     @staticmethod
@@ -73,14 +87,15 @@ class Table(BaseFrame):
             else:
                 self.grid_columnconfigure(c, weight=width)
     
-    def add(self, *iwidgets: SupportsWidget, **kwidgets: SupportsWidget):
+    def add(self, *iwidgets: SupportsWidget, **kwidgets: SupportsWidget) -> int:
         row = {}
         next_row = len(self.widgets)
         for k, widget in self._iter(*iwidgets, **kwidgets):
             widget = self.as_widget(widget)
-            widget.grid(row=next_row, column=self.get_column(k))
+            widget.grid(row=next_row, column=self.get_column(k), padx=self.padx, pady=self.pady)
             row[k] = widget
         self.widgets.append(row)
+        return next_row
     
     def remove(self, row: int, key: ColumnKey):
         if w := self.get_widget(row, key):
@@ -105,16 +120,16 @@ class Table(BaseFrame):
 
 
 class Entry(ttk.Entry, Generic[T]):
-    def __init__(self, master, converter: conv.Converter[T] = conv.StringConverter, **kwargs):
+    def __init__(self, master, converter: conv.Converter[T] = conv.StringConverter(), **kwargs):
         super().__init__(master, **kwargs)
         self.var = tk.StringVar()
         self.config(textvariable=self.var)
         self.converter = converter
         
-    def get(self) -> T:
+    def get(self) -> T | None:
         return self.converter.to_value(self.var.get())
     
-    def set(self, value: T):
+    def set(self, value: T | None):
         self.var.set(self.converter.to_string(value))
 
     def listen(self, callback: Callable[[T, str | None], None]):
