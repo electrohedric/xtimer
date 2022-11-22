@@ -54,7 +54,7 @@ class State:
         with open(file, 'wb') as f:
             pickle.dump(self, f)
         os.remove(backup_file)
-        print("Saved successfully to " + file)
+        # print("Saved successfully to " + file)
     
     @staticmethod
     def load(file=None):
@@ -98,11 +98,26 @@ class App(ttk.Frame):
         self.product_list.grid(row=1, sticky=tk.W, pady=5)
         self.timeline_stack.grid(row=2, sticky=tk.W, pady=5)
         self.init = False  # Done loading the state, and will now be persisted
+        
+        for product in self.state.products:
+            self.recalculate_timeline(product)
     
     def persist(self):
         if self.init:
             return
         self.state.save()
+    
+    def recalculate_timeline(self, product: Product):
+        if product.done_datetime is None or product.name is None or product.timeline is None:
+            return
+        print(f"{product.name} done: {product.done_datetime:%#I:%M}")
+        time = product.done_datetime
+        for step in reversed(product.timeline):
+            if step.name is None or step.time_delta is None:
+                continue
+            time -= step.time_delta
+            print(f"{step.name}: {time:%#I:%M}")
+        print("---------------------")
     
     def on_all_done_changed(self, d: datetime | None, error: str | None):
         if d is None:
@@ -254,6 +269,7 @@ class StepList(w.Table):
         
         def on_time_changed(dt: relativedelta | None, error: str | None):
             step.time_delta = dt
+            
             if dt is None:
                 step_entry.config(foreground='red')
                 display_label.set(error or "")
@@ -263,6 +279,8 @@ class StepList(w.Table):
                     display_label.set(f"{dt.days}:{dt.hours:02d}:{dt.minutes:02d}")  # 1:02:30
                 else:
                     display_label.set(f"{dt.hours}:{dt.minutes:02d}")  # 0:07
+            
+            self.app.recalculate_timeline(self.product)
             self.app.persist()
         
         step_entry.listen(on_name_change)

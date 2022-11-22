@@ -5,7 +5,7 @@ from abc import ABC
 from typing import Generic, TypeVar
 import sys
 
-
+# FIXME: 12 -> 12:01 not 12:00
 TIME_RE = re.compile(r"^(?P<hour>\d\d??)\s*:?\s*(?P<minute>\d\d?)?\s*(?P<p>pm?|am?)?$", re.IGNORECASE)
 DURATION_RE = re.compile(r"^(?:(?P<hours>\d+(?:\.\d+)?)?\s*[h:]\s*)?(?P<minutes>\d+)?m?$", re.IGNORECASE)
 
@@ -60,7 +60,8 @@ class TimeToNextDatetimeConverter(Converter):
                 self.error = "Minute must be 0-59"
                 return None
             now = datetime.now()
-            new_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            # assume time given is AM and adjust from there
+            new_time = now.replace(hour=hour % 12, minute=minute, second=0, microsecond=0)
             p = groups["p"]
             if p is None:
                 for _ in range(2):
