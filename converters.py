@@ -6,7 +6,8 @@ from typing import Generic, TypeVar
 import sys
 
 
-TIME_RE = re.compile(r"^(?P<hour>\d\d??):?(?P<minute>\d\d?)?(?:\s*(?P<p>pm?|am?))?$", re.IGNORECASE)
+TIME_RE = re.compile(r"^(?P<hour>\d\d??)\s*:?\s*(?P<minute>\d\d?)?\s*(?P<p>pm?|am?)?$", re.IGNORECASE)
+DURATION_RE = re.compile(r"^(?:(?P<hours>\d+(?:\.\d+)?)?\s*[h:]\s*)?(?P<minutes>\d+)?m?$", re.IGNORECASE)
 
 T = TypeVar('T')
 
@@ -45,7 +46,7 @@ class TimeToNextDatetimeConverter(Converter):
 
     def to_value(self, string: str) -> datetime | None:
         if not string:
-            self.failure = ""
+            self.error = ""
             return None
         self.error = None
         if match := TIME_RE.match(string):
@@ -72,4 +73,35 @@ class TimeToNextDatetimeConverter(Converter):
                     new_time += relativedelta(days=1)
             return new_time
         self.error = "Could not parse as time"
+        return None
+
+
+class DurationConverter(Converter):
+    def __init__(self, time_format: str):
+        super().__init__()
+        self.format = time_format
+
+    def to_string(self, value: relativedelta | None) -> str:
+        if value is None:
+            return ""
+        return self.format.format(h=value.hours, m=value.minutes)
+
+    def to_value(self, string: str) -> relativedelta | None:
+        if not string:
+            self.error = ""
+            return None
+        self.error = None
+        if match := DURATION_RE.match(string):
+            groups = match.groupdict()
+            hours = 0.0
+            mins = 0
+            if str_hours := groups.get("hours"):
+                hours = float(str_hours)
+            if str_mins := groups.get("minutes"):
+                mins = int(str_mins)
+            total_mins = round(hours * 60 + mins)
+            if total_mins < 0:
+                self.error = "Duration must be positive"
+            return relativedelta(minutes=total_mins)
+        self.error = "Could not parse as duration"
         return None

@@ -13,6 +13,7 @@ class BaseFrame(ttk.Frame):
     def as_widget(self, x: SupportsWidget):
         if isinstance(x, str):
             return ttk.Label(self, text=x)
+        assert x.master == self, f"{x} is being added to {self} but its master is {x.master} (should be {self})"
         return x
 
 
@@ -130,6 +131,11 @@ class Table(BaseFrame):
             yield r
 
 
+class List(Table):
+    def __init__(self, master, key_order: list[str] = None, fixed=False, padx=5, pady=5, **kwargs):
+        super().__init__(master, **kwargs)
+
+
 class Entry(ttk.Entry, Generic[T]):
     def __init__(self, master, converter: conv.Converter[T] = conv.StringConverter(), **kwargs):
         super().__init__(master, **kwargs)
@@ -138,7 +144,7 @@ class Entry(ttk.Entry, Generic[T]):
         self.converter = converter
         
     def get(self) -> T | None:
-        return self.converter.to_value(self.var.get())
+        return self.converter.to_value(self.var.get().strip())
     
     def set(self, value: T | None):
         self.var.set(self.converter.to_string(value))
