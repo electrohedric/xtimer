@@ -92,19 +92,30 @@ class Table(BaseFrame):
         next_row = len(self.widgets)
         for k, widget in self._iter(*iwidgets, **kwidgets):
             widget = self.as_widget(widget)
-            widget.grid(row=next_row, column=self.get_column(k), padx=self.padx, pady=self.pady)
+            widget.grid(row=next_row, column=self.get_column(k), padx=self.padx, pady=self.pady, sticky=tk.W)
             row[k] = widget
         self.widgets.append(row)
         return next_row
+    
+    def delete_row(self, row: int):
+        for k in self.key_order:
+            self.remove(row, k)
+        # the last remove() call deletes the widget row, it says we have one less row than is displayed
+        # shift all rows below up one
+        for r in range(row + 1, len(self.widgets) + 1):
+            for k in self.key_order:
+                self.move(r, k, r - 1)
     
     def remove(self, row: int, key: ColumnKey):
         if w := self.get_widget(row, key):
             w.grid_remove()
             del self.widgets[row][key]
+            if not self.widgets[row]:
+                del self.widgets[row]
             return w
         return None
     
-    def move(self, from_row: int, from_key: ColumnKey, row: int|None = None, key: ColumnKey|None = None):
+    def move(self, from_row: int, from_key: ColumnKey, row: int | None = None, key: ColumnKey | None = None):
         widget = self.remove(from_row, from_key)
         if not widget:
             return

@@ -10,20 +10,17 @@ import os
 
 
 class Product:
-    def __init__(self, pid: int, name, done_datetime):
+    def __init__(self, pid: int | None, name: str | None, done_datetime: datetime | None):
         self.id = pid
         self.name = name
         self.done_datetime = done_datetime
     
-    def is_empty(self):
-        return not self.name and self.done_datetime is None
-
 
 class State:
     perist_file = "state.pickle"
     
     def __init__(self):
-        self.products_done_datetime: datetime | None = None
+        self.all_done_datetime: datetime | None = None
         self.products: list[Product] = []
         self.next_product_id = 1
     
@@ -62,95 +59,131 @@ class State:
                 try:
                     return pickle.load(f)
                 except (EOFError, ValueError, TypeError):
-                    print("Backup file was corrupted. Defaulting to primary file")
+                    print("New state file was corrupted. Loading from previous state.")
         if os.path.exists(file):
             with open(file, 'rb') as f:
-                return pickle.load(f)
-        print("Primary file was missing")
+                try:
+                    return pickle.load(f)
+                except (EOFError, ValueError, TypeError):
+                    print("State file was corrupted. This should never happen.")
+        print("All state files are missing or corrupted.")  # bad!
         return State()
 
 
 class App(ttk.Frame):
     def __init__(self, state: State, **kwargs):
         super().__init__(**kwargs)
-        self.state = state
-        self.persistence = False  # Do not persist anything until the state is fully loaded
+        self.state: State = state
+        self.init = True  # Do not persist anything until the state is fully loaded
         
-        self.products_done_stack = w.HStack(self)
-        self.products_done_entry = w.Entry(self.products_done_stack, conv.TimeToNextDatetimeConverter("%#I:%M %p"), width=10)  # 1:30 PM
-        self.products_done_entry.set(self.state.products_done_datetime)
-        self.products_done_entry.listen(self.on_products_done_changed)
-        self.products_done_display_label = w.Label(self.products_done_stack)
-        self.products_done_stack.add("All products done @", self.products_done_entry, self.products_done_display_label)
+        self.all_done_stack = w.HStack(self)
+        self.all_done_entry = w.Entry(self.all_done_stack, conv.TimeToNextDatetimeConverter("%#I:%M %p"), width=10)  # 1:30 PM
+        self.all_done_entry.set(self.state.all_done_datetime)
+        self.all_done_entry.listen(self.on_all_done_changed)
+        self.all_done_display_label = w.Label(self.all_done_stack)
+        self.all_done_stack.add("All products done @", self.all_done_entry, self.all_done_display_label)
         
         self.products_table = w.Table(self, ["product", "time", "display"])
-        self.products = {x.id: x for x in self.state.products}
+        self.products = {}
         for product in self.state.products:
-            self.add_product(product)
-        self.add_new_product()
+            self.products[product.id] = product
+            self.render_product(product)
+        self.ensure_one_blank_product()
         
         self.timeline_stack = w.VStack(self)
         
-        self.products_done_stack.grid(row=0, sticky=tk.W, pady=5)
+        self.all_done_stack.grid(row=0, sticky=tk.W, pady=5)
         self.products_table.grid(row=1, sticky=tk.W, pady=5)
         self.timeline_stack.grid(row=2, sticky=tk.W, pady=5)
-        self.persistence = True  # Done loading the state, and will now be persisted
+        self.init = False  # Done loading the state, and will now be persisted
     
     def persist(self):
-        if self.persistence:
-            self.state.save()
+        if self.init:
+            return
+        self.state.save()
     
-    def add_new_product(self):
-        prod = Product(self.state.next_product_id, None, None)
-        self.state.products.append(prod)
-        self.state.next_product_id += 1
-        self.products[prod.id] = prod
-        self.add_product(prod)
+    def ensure_one_blank_product(self):
+        if self.init:
+            return
+        empty = 0
+        last_index = len(self.state.products) - 1
+        for i in range(last_index, -1, -1):
+            product = self.state.products[i]
+            if product.name:
+                break
+            else:
+                empty += 1
+        if empty == 0:
+            self.add_phantom_product()
+        else:
+            for j in range(last_index, last_index - empty + 1, -1):
+                rm_product = self.state.products[j]
+                self.products_table.delete_row(j)
+                del self.products[rm_product.id]
+                del self.state.products[j]
+    
+    def register_new_product(self, product: Product):
+        if product.id is None:
+            product.id = self.state.next_product_id
+            self.state.next_product_id += 1
+            self.products[product.id] = product
+            self.state.products.append(product)
+    
+    def add_phantom_product(self):
+        product = Product(None, None, None)
+        self.render_product(product)
         
-    def add_product(self, product: Product):
+    def render_product(self, product: Product):
         product_entry = w.Entry(self.products_table, width=20)
         time_entry = w.Entry(self.products_table, conv.TimeToNextDatetimeConverter("%#I:%M %p"), width=10)  # 1:30 PM
         display_label = w.Label(self.products_table)
         row = self.products_table.add(product=product_entry, time=time_entry, display=display_label)
     
-        def on_product_name_change(s: str, _err):
+        def on_name_change(s: str, _err):
             product.name = s
+            self.register_new_product(product)
+            if s:
+                if product.done_datetime is None:
+                    self.products_table.get_widget(row, "time").set(self.state.all_done_datetime)
+                    
+            self.ensure_one_blank_product()
             self.persist()
     
-        def on_product_done_changed(d: datetime | None, error: str | None):
-            if d is None:
-                if error:
-                    product_entry.config(foreground='red')
-                    display_label.set(error)
-                return
-            product_entry.config(foreground='black')
-            display_label.set(d.strftime("%a, %#I:%M %p"))  # Sun, 1:30 PM
+        def on_done_changed(d: datetime | None, error: str | None):
             product.done_datetime = d
+            self.register_new_product(product)
+            if d is None:
+                product_entry.config(foreground='red')
+                display_label.set(error or "")
+            else:
+                product_entry.config(foreground='black')
+                display_label.set(d.strftime("%a, %#I:%M %p"))  # Sun, 1:30 PM
+
             self.persist()
     
-        product_entry.listen(on_product_name_change)
-        time_entry.listen(on_product_done_changed)
+        product_entry.listen(on_name_change)
+        time_entry.listen(on_done_changed)
         product_entry.set(product.name)
         time_entry.set(product.done_datetime)
         
     
-    def on_products_done_changed(self, d: datetime | None, error: str | None):
+    def on_all_done_changed(self, d: datetime | None, error: str | None):
         if d is None:
-            if error:
-                self.products_done_entry.config(foreground='red')
-                self.products_done_display_label.set(error)
-            return
-        self.products_done_entry.config(foreground='black')
-        self.products_done_display_label.set(d.strftime("%a, %#I:%M %p"))  # Sun, 1:30 PM
+            self.all_done_entry.config(foreground='red')
+            self.all_done_display_label.set(error or "")
+        else:
+            self.all_done_entry.config(foreground='black')
+            self.all_done_display_label.set(d.strftime("%a, %#I:%M %p"))  # Sun, 1:30 PM
         
         # update all times of products to the new default if they matched the previous default value
-        for row in self.products_table:
-            if entry := self.products_table.get_widget(row, "time"):  # type: w.Entry
-                custom_dt = entry.get()
-                if custom_dt is None or custom_dt == self.state.products_done_datetime:
-                    entry.set(d)
+        for row, product in enumerate(self.state.products):
+            if not product.name:
+                continue
+            dt = product.done_datetime
+            if dt is None or dt == self.state.all_done_datetime:
+                self.products_table.get_widget(row, "time").set(d)
                     
-        self.state.products_done_datetime = d
+        self.state.all_done_datetime = d
         self.persist()
 
 
